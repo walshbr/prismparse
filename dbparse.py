@@ -16,7 +16,6 @@ import json
 import yaml
 from bs4 import BeautifulSoup
 
-
 class Prism(object):
     """Generate facet objects from YML/JSON."""
     def __init__(self, record):
@@ -33,6 +32,12 @@ class Prism(object):
         self.publication_date = record[10]
         self.language = record[11]
         self.license = record[12]
+        self.recreated_text = self.recreate_text_from_spans()
+
+    def recreate_text_from_spans(self):
+        """Gives a tokenized list of the text in the prism"""
+        return [word.text for word in
+                BeautifulSoup(self.content, 'lxml').select('.word')]
 
 
 class WordMarking(object):
@@ -70,19 +75,44 @@ class ParsedData(object):
         """Returns all uuids pertaining to a particular Prism."""
         return [prism.uuid for prism in self.prisms]
 
-    def recreate_text_from_spans(self):
-        """Gives a tokenized list of the text in the prism"""
-        all_words = []
-        for prism in self.prisms:
-            words = [word.text for word in BeautifulSoup(prism.content, 'lxml').select('.word')]
-            all_words.append(words)
-        return all_words
+    def get_all_markings_for_a_uuid(self, prism_uuid):
+        return [marking for marking
+                in self.word_markings if marking.prism_id == prism_uuid]
+
+    def markings_by_facet_num(self, list_of_markings):
+        """Need to """
+        markings_count_by_facets = {1: [], 2: [], 3: []}
+        for marking in list_of_markings:
+            markings_count_by_facets[marking.facet_id].append(marking.index)
+        # markings_count_by_facets[marking.facet_id] =\
+        #     markings_count_by_facets.append(marking.index)
+        return(markings_count_by_facets)
+
+    def get_counts_for_all_words(self, prism):
+        """Given a prism, produce a list of counts for each word."""
+        markings = self.get_all_markings_for_a_uuid(prism.uuid)
+        sorted_markings = self.markings_by_facet_num(markings)
+        tokenized_text = prism.recreated_text
+        words_with_markings = []
+        for index, word in enumerate(tokenized_text):
+            markings = {1: 0, 2: 0, 3: 0}
+            for key in [1, 2, 3]:
+                if index in sorted_markings[key]:
+                    markings[key] += 1
+            words_with_markings.append((word, markings))
+        print(words_with_markings)
+        # appears to be working - I think you just don't have any
+        # words that have been marked more than once. should check when you
+        # get a real database dump.
+
+        return words_with_markings
 
     def produce_models(self):
         """Generates data models from a given database file."""
         prisms = [Prism(record) for record in self.json['prisms']['records']]
         facets = [Facet(record) for record in self.json['facets']['records']]
-        word_markings = [WordMarking(record) for record in self.json['word_markings']['records']]
+        word_markings = [WordMarking(record) for record in
+                         self.json['word_markings']['records']]
         return prisms, facets, word_markings
 
     def get_yaml_and_convert_to_json(self):
@@ -100,19 +130,13 @@ class ParsedData(object):
             for row in data:
                 writer.writerow(row)
 
-# word_markings = ['id', 'index', 'created_at', 'updated_at', 'user_id', 'facet_id', 'prism_id']
-# we care about index, facet_id, and prism_id
-#
-# def get all_markings_for_a_prism('uuid'):
-#     """take a uuid and return only the word_markings for that prism."""
-#     pass
-
 
 def main():
     """Functions for when called from CLI."""
     print(ParsedData())
     # uuids = get_all_prism_uuids(the_json)
     # words = recreate_text_from_spans(the_json)
+
 
 if __name__ == '__main__':
     main()
