@@ -1,7 +1,5 @@
-# convert yaml to json
-# pip3 install pyyaml
-# http://pyyaml.org/wiki/PyYAMLDocumentation
-# py3 yaml2json.py < ~/code/manpow/homeland/heartland/puphpet/config.yaml
+"""Provides a wrapper for interacting with database data pulled from Prism."""
+# yaml parsing adapted from:
 # gist https://gist.github.com/noahcoad/51934724e0896184a2340217b383af73
 
 # ( POSITION INDEX; WORD; MARKINGS TOPIC0; MARKINGS TOPIC1; MARKINGS TOPIC2 …)
@@ -14,36 +12,13 @@
 # then group by index position
 
 import csv
-import yaml, json, sys
+import json
+import yaml
 from bs4 import BeautifulSoup
 
-def write_to_csv(data):
-    with open('output.csv', 'w') as fout:
-        writer = csv.writer(fout)
-        for row in data:
-            writer.writerow(row)
-
-def get_yaml_and_convert_to_json(fn):
-    with open(fn, 'r') as fin:
-        raw_text = fin.read()
-        proc_yaml = yaml.load(raw_text)
-        proc_json = json.dumps(proc_yaml, sort_keys=True, indent=2)
-
-        return json.loads(proc_json)
-
-def get_all_prism_uuids(json_data):
-    return [row[0] for row in json_data['prisms']['records']]
-
-def recreate_text_from_spans(json_data):
-    """gives a tokenized list of the text in the prism"""
-    all_words = []
-    for row in json_data['prisms']['records']:
-        words = [word.text for word in BeautifulSoup(row[5], 'lxml').select('.word')]
-        all_words.append(words)
-    return all_words
-    # return [row[5] for row in ['prisms']['records'][0][5]]
 
 class Prism(object):
+    """Generate facet objects from YML/JSON."""
     def __init__(self, record):
         self.uuid = record[0]
         self.created_at = record[1]
@@ -59,9 +34,11 @@ class Prism(object):
         self.language = record[11]
         self.license = record[12]
 
+
 class WordMarking(object):
+    """Generate facet objects from YML/JSON."""
     def __init__(self, record):
-        self.id = record[0]
+        self.id_num = record[0]
         self.index = record[1]
         self.created_at = record[2]
         self.updated_at = record[3]
@@ -69,9 +46,11 @@ class WordMarking(object):
         self.facet_id = record[5]
         self.prism_id = record[6]
 
+
 class Facet(object):
+    """Generate facet objects from YML/JSON."""
     def __init__(self, record):
-        self.id = record[0]
+        self.id_num = record[0]
         self.color = record[1]
         self.description = record[2]
         self.created_at = record[3]
@@ -80,6 +59,47 @@ class Facet(object):
         self.prism_id = record[6]
 
 
+class ParsedData(object):
+    """Provides data parsing methods for working with Prism data."""
+    def __init__(self):
+        self.filename = 'data.yml'
+        self.json = self.get_yaml_and_convert_to_json()
+        self.prisms, self.facets, self.word_markings = self.produce_models()
+
+    def get_all_prism_uuids(self):
+        """Returns all uuids pertaining to a particular Prism."""
+        return [prism.uuid for prism in self.prisms]
+
+    def recreate_text_from_spans(self):
+        """Gives a tokenized list of the text in the prism"""
+        all_words = []
+        for prism in self.prisms:
+            words = [word.text for word in BeautifulSoup(prism.content, 'lxml').select('.word')]
+            all_words.append(words)
+        return all_words
+
+    def produce_models(self):
+        """Generates data models from a given database file."""
+        prisms = [Prism(record) for record in self.json['prisms']['records']]
+        facets = [Facet(record) for record in self.json['facets']['records']]
+        word_markings = [WordMarking(record) for record in self.json['word_markings']['records']]
+        return prisms, facets, word_markings
+
+    def get_yaml_and_convert_to_json(self):
+        """Works from filename -> YML -> json"""
+        with open(self.filename, 'r') as fin:
+            raw_text = fin.read()
+            proc_yaml = yaml.load(raw_text)
+            proc_json = json.dumps(proc_yaml, sort_keys=True, indent=2)
+            return json.loads(proc_json)
+
+    def write_to_csv(self, data):
+        """Write to CSV"""
+        with open('output.csv', 'w') as fout:
+            writer = csv.writer(fout)
+            for row in data:
+                writer.writerow(row)
+
 # word_markings = ['id', 'index', 'created_at', 'updated_at', 'user_id', 'facet_id', 'prism_id']
 # we care about index, facet_id, and prism_id
 #
@@ -87,21 +107,10 @@ class Facet(object):
 #     """take a uuid and return only the word_markings for that prism."""
 #     pass
 
-class Word(object):
-    def __init__(self):
-        self.facets
-        self.markings
-
-def produce_models(the_json):
-    prisms = [Prism(record) for record in the_json['prisms']['records']]
-    facets = [Facet(record) for record in the_json['facets']['records']]
-    word_markings = [WordMarking(record) for record in the_json['word_markings']['records']]
-    return prisms, facets, word_markings
 
 def main():
-    fn = 'db/data.yml'
-    the_json = get_yaml_and_convert_to_json(fn)
-    prisms, facets, word_markings = produce_models(the_json)
+    """Functions for when called from CLI."""
+    print(ParsedData())
     # uuids = get_all_prism_uuids(the_json)
     # words = recreate_text_from_spans(the_json)
 
